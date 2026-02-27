@@ -1,82 +1,117 @@
-import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-import fs from 'fs';
-import path from 'path';
-import { promises as fsPromises } from 'fs';
+import { NextResponse } from 'next/server';
+import { HfInference } from '@huggingface/inference';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Define the public directory path
-const publicDir = path.join(process.cwd(), 'public');
-const generatedDir = path.join(publicDir, 'generated');
-
-// Ensure the generated directory exists
-if (!fs.existsSync(generatedDir)) {
-  fs.mkdirSync(generatedDir, { recursive: true });
+interface GenerateImageRequest {
+  prompt: string;
+  negative_prompt?: string;
+  width?: number;
+  height?: number;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { chapterId, prompt } = await request.json();
+interface GenerateImageResponse {
+  success: boolean;
+  imageData?: string;
+  error?: string;
+  retryAfter?: number;
+}
 
-    // Validate input
-    if (!chapterId || !prompt) {
+const hf = new HfInference(process.env.HUGGINGFACE_API_TOKEN);
+
+const MODEL_ID = 'stabilityai/stable-diffusion-xl-base-1.0';
+const DEFAULT_WIDTH = 1024;
+const DEFAULT_HEIGHT = 1024;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+
+export async function POST(request: Request): Promise<NextResponse<GenerateImageResponse>> {
+  try {
+    const body: GenerateImageRequest = await request.json();
+    
+    if (!body.prompt || typeof body.prompt !== 'string' || body.prompt.trim().length < 5) {
       return NextResponse.json(
-        { error: 'chapterId and prompt are required' },
+        { success: false, error: 'Prompt ist erforderlich (min. 5 Zeichen)' },
         { status: 400 }
       );
     }
 
-    // Define the image path
-    const imageName = `chapter-${chapterId}.jpg`;
-    const imagePath = path.join(generatedDir, imageName);
-    const imageUrlPath = `/generated/${imageName}`;
+    const { 
+      prompt, 
+      negative_prompt = 'blurry, low quality, distorted, watermark',
+      width = DEFAULT_WIDTH,
+      height = DEFAULT_HEIGHT
+    } = body;
 
-    // Check if image already exists (caching)
-    if (fs.existsSync(imagePath)) {
-      console.log(`Image already exists for chapter ${chapterId}`);
-      return NextResponse.json({ imagePath: imageUrlPath });
-    }
-
-    // Generate image using OpenAI DALL-E 3
-    console.log(`Generating image for chapter ${chapterId} with prompt: ${prompt}`);
+    let lastError: Error | null = null;
     
-    const finalPrompt = `Japanese ukiyo-e woodblock print style, ${prompt}, dramatic lighting, rich colors, no text, no watermark`;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await hf.textToImage({
+          model: MODEL_ID,
+          inputs: prompt,
+          parameters: {
+            negative_prompt,
+            width,
+            height,
+            num_inference_steps: 30,
+          },
+        });
+
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        const imageData = `image/png;base64,${base64}`;
+
+        return NextResponse.json({ success: true, imageData });
+        
+      } catch (error: any) {
+        lastError = error;
+        
+        if (error.status === 503 && attempt < MAX_RETRIES) {
+          const retryAfter = (error.estimated_time || RETRY_DELAY_MS / 1000) * 1000;
+          console.log(`[HF] Model loading, retry ${attempt}/${MAX_RETRIES} in ${retryAfter}ms`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+        
+        break;
+      }
+    }
+
+    console.error('[HF] Image generation failed after retries:', lastError);
     
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: finalPrompt,
-      n: 1,
-      size: '1792x1024',
-      quality: 'standard',
-    });
-
-    const imageUrl = response.data[0].url;
-    if (!imageUrl) {
-      throw new Error('No image URL returned from OpenAI');
+    if (lastError?.status === 503) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Modell wird noch geladen. Bitte in 20-30 Sekunden erneut versuchen.',
+          retryAfter: 30
+        },
+        { status: 503 }
+      );
+    }
+    
+    if (lastError?.status === 429) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit erreicht. Bitte warten Sie einen Moment.' },
+        { status: 429 }
+      );
     }
 
-    // Download the image from the URL
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error(`Failed to download image: ${imageResponse.statusText}`);
-    }
-
-    const imageBuffer = await imageResponse.buffer();
-
-    // Write the image to the public directory
-    await fsPromises.writeFile(imagePath, imageBuffer);
-
-    console.log(`Image saved to ${imagePath}`);
-
-    return NextResponse.json({ imagePath: imageUrlPath });
-  } catch (error) {
-    console.error('Error generating image:', error);
     return NextResponse.json(
-      { error: 'Failed to generate image', details: (error as Error).message },
+      { success: false, error: 'Bildgenerierung fehlgeschlagen. Bitte erneut versuchen.' },
+      { status: 500 }
+    );
+
+  } catch (error: any) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        { success: false, error: 'Ungültiges JSON im Request' },
+        { status: 400 }
+      );
+    }
+    
+    console.error('[API] Unexpected error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Interner Serverfehler' },
       { status: 500 }
     );
   }
