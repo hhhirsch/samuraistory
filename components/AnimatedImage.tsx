@@ -39,6 +39,7 @@ const AnimatedImage = ({ src, alt }: AnimatedImageProps) => {
       )}
       
       {!hasError ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt={alt}
@@ -50,17 +51,6 @@ const AnimatedImage = ({ src, alt }: AnimatedImageProps) => {
         <div className="w-full h-full bg-gray-800 flex items-center justify-center">
           <WaveSVG />
         </div>
-      )}
-      
-      {!isLoading && !hasError && (
-        <motion.img
-          src={src}
-          alt={alt}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="w-full h-full object-cover"
-        />
       )}
     </div>
   );
