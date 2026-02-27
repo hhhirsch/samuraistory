@@ -13,10 +13,8 @@ export default function ChapterPage() {
   const [words, setWords] = useState<string[]>([]);
   const [showQuizButton, setShowQuizButton] = useState(false);
   
-  // Find the current chapter data
   const chapter = storyData.find(ch => ch.id === parseInt(chapterId as string));
 
-  // ✅ useEffect VOR dem conditional return!
   useEffect(() => {
     if (chapter?.storyText) {
       const textWords = chapter.storyText.split(/\s+/);
@@ -32,7 +30,6 @@ export default function ChapterPage() {
     }
   }, [chapter]);
 
-  // ✅ Conditional return NACH allen Hooks
   if (!chapter) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-amber-900/20 flex items-center justify-center">
