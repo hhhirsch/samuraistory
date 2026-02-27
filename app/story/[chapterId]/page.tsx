@@ -13,9 +13,23 @@ export default function ChapterPage() {
   const [words, setWords] = useState<string[]>([]);
   const [showQuizButton, setShowQuizButton] = useState(false);
   
-  // Find the current chapter data
   const chapter = storyData.find(ch => ch.id === parseInt(chapterId as string));
-  
+
+  useEffect(() => {
+    if (chapter?.storyText) {
+      const textWords = chapter.storyText.split(/\s+/);
+      setWords(textWords);
+      
+      const totalAnimationTime = textWords.length * 50;
+      
+      const timer = setTimeout(() => {
+        setShowQuizButton(true);
+      }, totalAnimationTime);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [chapter]);
+
   if (!chapter) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-amber-900/20 flex items-center justify-center">
@@ -29,23 +43,6 @@ export default function ChapterPage() {
     );
   }
 
-  useEffect(() => {
-    if (chapter?.storyText) {
-      // Split the story into words
-      const textWords = chapter.storyText.split(/\s+/);
-      setWords(textWords);
-      
-      // Show quiz button after animation completes
-      const totalAnimationTime = textWords.length * 50; // 50ms per word
-      
-      const timer = setTimeout(() => {
-        setShowQuizButton(true);
-      }, totalAnimationTime);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [chapter]);
-
   return (
     <div 
       className="min-h-screen bg-gradient-radial from-amber-900/20 via-gray-900 to-gray-900 pt-16 pb-24 px-4"
@@ -57,7 +54,6 @@ export default function ChapterPage() {
       
       <div className="container mx-auto max-w-6xl mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left column: Story text */}
           <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-xl border border-amber-800/30 h-full">
             <h1 className="text-2xl font-bold text-amber-400 mb-4">{chapter.title}</h1>
             <p className="text-gray-300 italic mb-4">{chapter.era}</p>
@@ -77,7 +73,7 @@ export default function ChapterPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{
-                        delay: index * 0.05, // 50ms delay per word
+                        delay: index * 0.05,
                         duration: 0.1
                       }}
                       className="inline-block mr-1"
@@ -90,14 +86,12 @@ export default function ChapterPage() {
             </div>
           </div>
           
-          {/* Right column: Image */}
           <div className="h-full">
             <AnimatedImage 
               src={`/generated/chapter-${chapter.id}.jpg`} 
               alt={`Bild zum Kapitel ${chapter.title}`} 
             />
             
-            {/* Quiz button - appears only after text animation completes */}
             <AnimatePresence>
               {showQuizButton && (
                 <motion.div
