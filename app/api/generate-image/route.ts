@@ -15,6 +15,11 @@ interface GenerateImageResponse {
   retryAfter?: number;
 }
 
+interface HFError extends Error {
+  status?: number;
+  estimated_time?: number;
+}
+
 const hf = new HfInference(process.env.HUGGINGFACE_API_TOKEN);
 
 const MODEL_ID = 'stabilityai/stable-diffusion-xl-base-1.0';
@@ -41,7 +46,7 @@ export async function POST(request: Request): Promise<NextResponse<GenerateImage
       height = DEFAULT_HEIGHT
     } = body;
 
-    let lastError: Error | null = null;
+    let lastError: HFError | null = null;
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -62,11 +67,11 @@ export async function POST(request: Request): Promise<NextResponse<GenerateImage
 
         return NextResponse.json({ success: true, imageData });
         
-      } catch (error: any) {
-        lastError = error;
+      } catch (error) {
+        lastError = error as HFError;
         
-        if (error.status === 503 && attempt < MAX_RETRIES) {
-          const retryAfter = (error.estimated_time || RETRY_DELAY_MS / 1000) * 1000;
+        if (lastError.status === 503 && attempt < MAX_RETRIES) {
+          const retryAfter = (lastError.estimated_time || RETRY_DELAY_MS / 1000) * 1000;
           console.log(`[HF] Model loading, retry ${attempt}/${MAX_RETRIES} in ${retryAfter}ms`);
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
@@ -101,7 +106,7 @@ export async function POST(request: Request): Promise<NextResponse<GenerateImage
       { status: 500 }
     );
 
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         { success: false, error: 'Ungültiges JSON im Request' },
