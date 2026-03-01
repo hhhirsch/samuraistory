@@ -7,71 +7,6 @@ import { useParams } from 'next/navigation';
 import ProgressBar from '@/components/ProgressBar';
 import storyData from '@/data/story.json';
 
-// Quiz-Daten für jedes Kapitel
-const quizData: Record<number, {
-  question: string;
-  options: string[];
-  correctAnswer: number;
-}[]> = {
-  1: [
-    {
-      question: "Was ist die wichtigste Tugend eines Samurai?",
-      options: ["Reichtum", "Ehre", "Macht", "Berühmtheit"],
-      correctAnswer: 1
-    },
-    {
-      question: "Welche Waffe ist traditionell mit Samurai verbunden?",
-      options: ["Bogen", "Speer", "Katana", "Axt"],
-      correctAnswer: 2
-    },
-    {
-      question: "Was bedeutet 'Bushido'?",
-      options: ["Der Weg des Kriegers", "Die Kunst des Kampfes", "Der Code der Ehre", "Die Schule der Samurai"],
-      correctAnswer: 0
-    }
-  ],
-  2: [
-    {
-      question: "In welcher Periode lebten die Samurai hauptsächlich?",
-      options: ["Edo-Zeit", "Meiji-Zeit", "Heian-Zeit", "Alle genannten"],
-      correctAnswer: 3
-    },
-    {
-      question: "Was trugen Samurai typischerweise?",
-      options: ["Rüstung", "Kimono", "Beides", "Nichts davon"],
-      correctAnswer: 2
-    }
-  ],
-  3: [
-    {
-      question: "Was ist ein Daimyo?",
-      options: ["Ein Bauer", "Ein Feudalherr", "Ein Händler", "Ein Mönch"],
-      correctAnswer: 1
-    }
-  ],
-  4: [
-    {
-      question: "Was bedeutet 'Seppuku'?",
-      options: ["Eine Meditationstechnik", "Ein ritueller Selbstmord", "Eine Kampftechnik", "Ein Fest"],
-      correctAnswer: 1
-    }
-  ],
-  5: [
-    {
-      question: "Welche Farbe symbolisiert oft Mut bei Samurai?",
-      options: ["Blau", "Rot", "Grün", "Weiß"],
-      correctAnswer: 1
-    }
-  ],
-  6: [
-    {
-      question: "Was war die Hauptpflicht eines Samurai?",
-      options: ["Handeln", "Farming", "Dienen", "Lehren"],
-      correctAnswer: 2
-    }
-  ]
-};
-
 export default function QuizPage() {
   const { chapterId } = useParams();
   const chapter = storyData.find(ch => ch.id === parseInt(chapterId as string));
@@ -82,11 +17,11 @@ export default function QuizPage() {
   const [score, setScore] = useState(0);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
-  const questions = quizData[parseInt(chapterId as string)] || quizData[1];
+  const questions = chapter?.quiz || [];
 
   const handleAnswer = (answerIndex: number) => {
     setSelectedAnswer(answerIndex);
-    const correct = answerIndex === questions[currentQuestion].correctAnswer;
+    const correct = answerIndex === questions[currentQuestion].correctIndex;
     setIsCorrect(correct);
     
     if (correct) {
@@ -163,7 +98,7 @@ export default function QuizPage() {
                 </motion.button>
               </Link>
               
-              {chapter.id < 6 && (
+              {chapter.id < storyData.length && (
                 <Link href={`/story/${chapter.id + 1}`}>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -227,7 +162,7 @@ export default function QuizPage() {
                     ? isCorrect
                       ? 'bg-green-600 border-green-400'
                       : 'bg-red-600 border-red-400'
-                    : selectedAnswer !== null && index === question.correctAnswer
+                    : selectedAnswer !== null && index === question.correctIndex
                     ? 'bg-green-600 border-green-400'
                     : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
                 } border-2`}
@@ -236,6 +171,18 @@ export default function QuizPage() {
               </motion.button>
             ))}
           </div>
+
+          <AnimatePresence>
+            {selectedAnswer !== null && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mt-4 p-4 bg-amber-900/30 border border-amber-700/50 rounded-lg"
+              >
+                <p className="text-amber-300 text-sm">{questions[currentQuestion].explanation}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="mt-8 flex justify-between">
             <Link href={`/story/${chapterId}`}>
