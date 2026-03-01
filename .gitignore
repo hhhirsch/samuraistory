@@ -2,3 +2,4 @@ Nothing should be ignored based on the provided file changes. The added file `ap
 node_modules
 .next
 next-env.d.ts
+tsconfig.tsbuildinfo
