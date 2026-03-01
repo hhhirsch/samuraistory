@@ -5,30 +5,60 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import ProgressBar from '@/components/ProgressBar';
-import AnimatedImage from '@/components/AnimatedImage';
 import storyData from '@/data/story.json';
 
 export default function ChapterPage() {
   const { chapterId } = useParams();
-  const [words, setWords] = useState<string[]>([]);
+  const [paragraphs, setParagraphs] = useState<string[]>([]);
   const [showQuizButton, setShowQuizButton] = useState(false);
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(true);
   
   const chapter = storyData.find(ch => ch.id === parseInt(chapterId as string));
 
   useEffect(() => {
     if (chapter?.storyText) {
-      const textWords = chapter.storyText.split(/\s+/);
-      setWords(textWords);
-      
-      const totalAnimationTime = textWords.length * 50;
-      
+      setParagraphs(chapter.storyText.split('\n\n'));
+      setShowQuizButton(false);
+
       const timer = setTimeout(() => {
         setShowQuizButton(true);
-      }, totalAnimationTime);
+      }, 1500);
       
       return () => clearTimeout(timer);
     }
   }, [chapter]);
+
+  useEffect(() => {
+    if (!chapter?.id) return;
+
+    setImageData(null);
+    setImageLoading(true);
+
+    const fetchImage = async (retry = false) => {
+      try {
+        const response = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: chapter.imagePrompt, width: 768, height: 512 }),
+        });
+
+        if (response.status === 503 && !retry) {
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          return fetchImage(true);
+        }
+
+        const data = await response.json();
+        if (data.success === true) {
+          setImageData(`${data.imageData}`);
+        }
+      } finally {
+        setImageLoading(false);
+      }
+    };
+
+    fetchImage();
+  }, [chapter?.id, chapter?.imagePrompt]);
 
   if (!chapter) {
     return (
@@ -65,21 +95,17 @@ export default function ChapterPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5 }}
-                  className="text-lg leading-relaxed text-gray-200"
                 >
-                  {words.map((word, index) => (
-                    <motion.span
+                  {paragraphs.map((paragraph, index) => (
+                    <motion.p
                       key={`${chapterId}-${index}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{
-                        delay: index * 0.05,
-                        duration: 0.1
-                      }}
-                      className="inline-block mr-1"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.3, duration: 0.5 }}
+                      className="text-gray-200 leading-relaxed mb-6 text-base"
                     >
-                      {word}
-                    </motion.span>
+                      {paragraph}
+                    </motion.p>
                   ))}
                 </motion.div>
               </AnimatePresence>
@@ -87,10 +113,24 @@ export default function ChapterPage() {
           </div>
           
           <div className="h-full">
-            <AnimatedImage 
-              src={`/generated/chapter-${chapter.id}.jpg`} 
-              alt={`Bild zum Kapitel ${chapter.title}`} 
-            />
+            <div className="aspect-video rounded-lg border border-amber-800/30 bg-gray-800/50 overflow-hidden flex items-center justify-center">
+              {imageLoading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-amber-400 text-sm">Bild wird generiert…</span>
+                </div>
+              ) : imageData ? (
+                <motion.img
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  src={`data:${imageData}`}
+                  alt={`Bild zum Kapitel ${chapter.title}`}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-gray-500">Kein Bild verfügbar</span>
+              )}
+            </div>
             
             <AnimatePresence>
               {showQuizButton && (
